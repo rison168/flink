@@ -56,6 +56,8 @@ object OriginDataType {
     MySenSorSource()
   )
 
+  env.execute("origin data type")
+
 
 }
 

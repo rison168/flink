@@ -292,22 +292,257 @@
 * Transform 转换算子
 
   * map
+
+    ![image-20210706185810208](pic/image-20210706185810208.png)
+
   * flatMap
+
+    ![image-20210706185822359](pic/image-20210706185822359.png)
+
   * Filter
+
+    ![image-20210706185832640](pic/image-20210706185832640.png)
+
   * keyBy
+
+    ![image-20210706185848587](pic/image-20210706185848587.png)
+
   * 滚动聚合算子 Rolling Aggregation
+
+    ![image-20210706185904244](pic/image-20210706185904244.png)
+
   * Reduce
+
+    ![image-20210706185919118](pic/image-20210706185919118.png)
+
   * Split 和 Select
+
+    ![image-20210706185945638](pic/image-20210706185945638.png)
+
+    ![image-20210706190004806](pic/image-20210706190004806.png)
+
   * Connect 和 CoMap
+
+    ![image-20210706190033922](pic/image-20210706190033922.png)
+
+    ![image-20210706190050335](pic/image-20210706190050335.png)
+
+    ![image-20210706190111672](pic/image-20210706190111672.png)
+
   * Union
+
+    ![image-20210706190128192](pic/image-20210706190128192.png)
+
+  ~~~scala
+  /**
+   * @author : Rison 2021/7/6 下午6:27
+   *         转换算子
+   */
+  object TransFormFunction {
+    def main(args: Array[String]): Unit = {
+  
+      val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+  
+      val dataStream: DataStream[String] = env.readTextFile("data/hello.txt")
+      //map
+      dataStream.map(
+        data => {
+          data.toInt * 2
+        }
+      )
+  
+      //flatMap
+      /**
+       * flatMap 的函数签名：def flatMap[A,B](as: List[A])(f: A ⇒ List[B]): List[B]
+       * 例如: flatMap(List(1,2,3))(i ⇒ List(i,i))
+       * 结果是 List(1,1,2,2,3,3), 而 List("a b", "c d").flatMap(line ⇒ line.split(" "))
+       * 结果是 List(a, b, c, d)。
+       */
+      dataStream.flatMap(
+        data => {
+          data.split(" ")
+        }
+      )
+  
+      // Filter
+      dataStream.filter(
+        data => {
+          data.toInt == 1
+        }
+      )
+  
+      //keyBy
+      /**
+       * DataStream → KeyedStream：逻辑地将一个流拆分成不相交的分区，每个分
+       * 区包含具有相同 key 的元素，在内部以 hash 的形式实现的。
+       */
+  
+  
+      //滚动聚合算子 Rolling Aggregation
+      /**
+       * 这些算子可以针对 KeyedStream 的每一个支流做聚合。
+       *  sum()
+       *  min()
+       *  max()
+       *  minBy()
+       *  maxBy()
+       */
+  
+      // reduce
+      /**
+       * KeyedStream → DataStream：一个分组数据流的聚合操作，合并当前的元素
+       * 和上次聚合的结果，产生一个新的值，返回的流中包含每一次聚合的结果，而不是
+       * 只返回最后一次聚合的最终结果
+       */
+  
+      dataStream.map(
+        data => {
+          val strings: Array[String] = data.split(",")
+          (data(0).toLong, data(1).toInt, data(1).toInt)
+        }
+      )
+        .keyBy(0)
+        .reduce(
+          (x, y) => {
+            (x._1, x._2, x._3 + y._3)
+          }
+        )
+  
+      //Split 和 Select
+      /**
+       * Split :
+       * DataStream → SplitStream：根据某些特征把一个 DataStream 拆分成两个或者
+       * 多个 DataStream。
+       *
+       * Select ：
+       * SplitStream→DataStream：从一个 SplitStream 中获取一个或者多个
+       * DataStream。
+       */
+  
+      val splitDataStream: SplitStream[(Long, Int)] = dataStream
+        .map(
+          data => {
+            val strings: Array[String] = data.split(",")
+            (strings(0).toLong, strings(1).toInt)
+          }
+        )
+        .split(
+          data => {
+            if (data._2 > 30) Seq("high") else Seq("low")
+          }
+        )
+  
+      val high: DataStream[(Long, Int)] = splitDataStream.select("high")
+      val low: DataStream[(Long, Int)] = splitDataStream.select("low")
+      val all: DataStream[(Long, Int)] = splitDataStream.select("high", "low")
+  
+      // Connect 和 CoMap
+  
+      /**
+       * DataStream,DataStream → ConnectedStreams：连接两个保持他们类型的数
+       * 据流，两个数据流被 Connect 之后，只是被放在了一个同一个流中，内部依然保持
+       * 各自的数据和形式不发生任何变化，两个流相互独立
+       *
+       * ConnectedStreams → DataStream：作用于 ConnectedStreams 上，功能与 map
+       * 和 flatMap 一样，对 ConnectedStreams 中的每一个 Stream 分别进行 map 和 flatMap
+       * 处理
+       */
+  
+      val connectDataStream: ConnectedStreams[(Long, Int), (Long, Int)] = high.connect(low)
+  
+      val coMap: DataStream[((Long, Int), String)] = connectDataStream.map(
+        highData => (highData, "high"),
+        lowData => (lowData, "low")
+      )
+  
+      //union
+      /**
+       * DataStream → DataStream：对两个或者两个以上的 DataStream 进行 union 操
+       * 作，产生一个包含所有 DataStream 元素的新 DataStream
+       *
+       * 1． Union 之前两个流的类型必须是一样，Connect 可以不一样，在之后的 coMap
+       * 中再去调整成为一样的。
+       * 2. Connect 只能操作两个流，Union 可以操作多个
+       */
+      val union: DataStream[(Long, Int)] = high.union(low)
+  
+  
+    }
+  }
+  
+  ~~~
+
+  
 
 * 支持的数据类型
 
+  > Flink 流应用程序处理的是以数据对象表示的事件流。所以在 Flink 内部，我们
+  > 需要能够处理这些对象。它们需要被序列化和反序列化，以便通过网络传送它们；
+  > 或者从状态后端、检查点和保存点读取它们。为了有效地做到这一点，Flink 需要明
+  > 确知道应用程序所处理的数据类型。Flink 使用类型信息的概念来表示数据类型，并
+  > 为每个数据类型生成特定的序列化器、反序列化器和比较器。
+  > Flink 还具有一个类型提取系统，该系统分析函数的输入和返回类型，以自动获
+  > 取类型信息，从而获得序列化器和反序列化器。但是，在某些情况下，例如 lambda
+  > 函数或泛型类型，需要显式地提供类型信息，才能使应用程序正常工作或提高其性
+  > 能。
+
   * 基础数据类型
+
+    > Flink 支持所有的 Java 和 Scala 基础数据类型，Int, Double, Long, String, …
+
+    ~~~ scala
+    val numbers: DataStream[Long] = env.fromElements(1L, 2L, 3L, 4L)
+    numbers.map( n => n + 1 )
+    ~~~
+
   * Java 和 Scala元组（Tuples）
+
+    ~~~ scala
+    val persons: DataStream[(String, Integer)] = env.fromElements(
+    ("Adam", 17),
+    ("Sarah", 23) )
+    persons.filter(p => p._2 > 18)
+    ~~~
+
+    
+
   * Scala样例类（case class）
+
+    ~~~scala
+    case class Person(name: String, age: Int)
+    val persons: DataStream[Person] = env.fromElements(
+    Person("Adam", 17),
+    Person("Sarah", 23) )
+    persons.filter(p => p.age > 18)
+    ~~~
+
+    
+
   * Java简单对象（POJO）
+
+    ~~~scala
+    public class Person {
+    public String name;
+    public int age;
+    public Person() {}
+    public Person(String name, int age) {
+    this.name = name;
+    this.age = age;
+    }
+    }
+    DataStream<Person> persons = env.fromElements(
+    new Person("Alex", 42),
+    new Person("Wendy", 23));
+    ~~~
+
+    
+
   * 其他（Array,List,Map,Enum,等等）
+
+    > Flink 对 Java 和 Scala 中的一些特殊目的的类型也都是支持的，比如 Java 的
+    > ArrayList，HashMap，Enum 等等
+
+    
 
 * 实现UDP函数----更细粒度的控制流
 
