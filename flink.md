@@ -823,7 +823,29 @@ stream.addSink(new MySink(XXXX))
     
       }
     }
+    
+    ~~~
+
+* ElasticSearch
+
+  * pom.xml
+
+    ~~~scala
+            <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-connector-elasticsearch6_2.12</artifactId>
+                <version>1.10.1</version>
+            </dependency>
     ~~~
 
     
 
+  * 代码
+
+    ~~~scala
+    
+    ~~~
+
+    
+
+    
