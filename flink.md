@@ -544,10 +544,85 @@
 
     
 
-* 实现UDP函数----更细粒度的控制流
+* 实现UDF函数----更细粒度的控制流
 
   * 函数类 Function
+
+    Flink 暴露了所有的UDF函数接口（实现方式为接口或者抽象类）。例如MapFunction/FilterFunction/ProcessFunction等等。
+
+    比如 FilterFunction接口：
+
+    ~~~scala
+    **
+     * @author : Rison 2021/7/6 下午7:32
+     *
+     */
+    class FilterFilter extends FilterFunction[String]{
+      override def filter(t: String): Boolean = {
+        t.contains("flink")
+      }
+    }
+    
+    object FilterMain{
+      def main(args: Array[String]): Unit = {
+         val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+    
+        val dataStream: DataStream[String] = env.fromCollection(
+          List("spark", "flink")
+        )
+        //外部函数定义
+        dataStream.filter(new FilterFilter).print("外部函数：")
+    
+        //匿名函数
+        dataStream.filter(
+          new FilterFunction[String] {
+            override def filter(t: String) = {
+              t.contains("spark")
+            }
+          }
+        ).print("匿名函数：")
+    
+        //带参判断
+    
+        dataStream.filter(
+          FilterKey("flink")
+        ).print("带参数flink:")
+    
+        env.execute("Filter main")
+      }
+    }
+    
+    case class FilterKey(key: String) extends FilterFunction[String]{
+      override def filter(t: String): Boolean = {
+        t.contains(key)
+      }
+    }
+    ~~~
+
+    
+
   * 匿名函数 lambda Function
+
+    ~~~scala
+    
+    /**
+     * @author : Rison 2021/7/7 上午8:54
+     *  lambada Function instance
+     */
+    object LambdaFunctionMain {
+      def main(args: Array[String]): Unit = {
+        val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+        val dataStream: DataStream[String] = env.fromCollection(
+          List("flink", "spark")
+        )
+        dataStream.filter(_.contains("flink")).print("lambda:")
+        env.execute("lambda Function")
+      }
+    }
+    ~~~
+
+    
+
   * 富函数 Rich Function
 
 
