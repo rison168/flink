@@ -13,6 +13,21 @@ object TumblingWindow {
   def main(args: Array[String]): Unit = {
     val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
     val dataStream: DataStream[String] = env.socketTextStream("localhost", 7777)
+    // TimeWindow
+//    dataStream
+//      .map(
+//        data => {
+//          val strings: Array[String] = data.split(",")
+//          (strings(0).toString, strings(1).toLong, strings(2).toDouble)
+//        }
+//      )
+//      .keyBy(_._1)
+//      .timeWindow(Time.seconds(15))
+//      .reduce(
+//        (x, y) => (x._1, x._2, x._3.min(y._3))
+//      ).print()
+
+    //countWindow
     dataStream
       .map(
         data => {
@@ -21,7 +36,7 @@ object TumblingWindow {
         }
       )
       .keyBy(_._1)
-      .timeWindow(Time.seconds(15))
+      .countWindow(5)
       .reduce(
         (x, y) => (x._1, x._2, x._3.min(y._3))
       ).print()

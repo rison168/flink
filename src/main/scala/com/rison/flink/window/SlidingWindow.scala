@@ -27,6 +27,8 @@ object SlidingWindow {
       .reduce(
         (x, y) => (x._1, x._2, x._3.min(y._3))
       ).print()
+
+    //
     env.execute("Tumbling window")
   }
 }
