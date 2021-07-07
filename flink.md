@@ -625,5 +625,59 @@
 
   * 富函数 Rich Function
 
+    **富函数**是DataStream API提供的一个函数类的接口，所有Flink函数类都有其Rich版本，她与常规函数的不同在于，可以获取其运行环境的上下文，并拥有一些生命周期方法，所以实现更复杂的功能。
 
+    * RichMapFunction
+    * RichFlatMapFunction
+    * RichFilterFunction
+    * ...
 
+    Rich Function 有一个生命周期的概念，典型的生命周期方法有：
+
+    * open() 是rich function的初始化方法，当一个算子例如map 或者filter被调用之前open()会被调用。
+
+    * close() 是生命周期中的最后调用的方法，做一些清理操作，比如关闭连接等等。
+
+    * getRuntimeContext() 提供了函数的RuntimeContext的一些信息，比如函数要执行的并行度，任务名字，以及state的状态。
+
+      ~~~ scala
+      /**
+       * @author : Rison 2021/7/7 上午9:07
+       *         RichFunction
+       *
+       */
+      object RichFunctionMain {
+        def main(args: Array[String]): Unit = {
+          val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+          env.fromCollection(
+            List(2, 2, 10, 11, 12, 14, 16, 17, 20)
+          ).flatMap(new MyFlatMap).print()
+          env.execute("rich function")
+      
+        }
+      }
+      
+      class MyFlatMap extends RichFlatMapFunction[Int, (Int, Int)] {
+        var subTaskIndex = 0
+      
+        override def open(parameters: Configuration): Unit = {
+          subTaskIndex = getRuntimeContext.getIndexOfThisSubtask
+          //以下可以做些初始化操作，比如建立hdfs连接等等
+        }
+      
+        override def flatMap(in: Int, collector: Collector[(Int, Int)]): Unit = {
+          if (in % 2 == subTaskIndex) {
+            collector.collect((subTaskIndex, in))
+          }
+        }
+      
+        override def close(): Unit = {
+          //做一些关闭清理操作
+        }
+      }
+      
+      ~~~
+
+* Sink
+
+  Flink  没有类似于spark的foreach方法，让用户进行迭代操作，
