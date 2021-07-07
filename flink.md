@@ -1048,6 +1048,26 @@ Window是无限数据流处理的核心,Window将一个无限的stream拆分为�
 
     下面代码中的sliding_size 设置为5s,也就是说，每5s就计算输出结果一次，每一次的计算的window范围是15s内的所有元素。
 
-    
+    ~~~scala
+    dataStream
+          .map(
+            data => {
+              val strings: Array[String] = data.split(",")
+              (strings(0).toString, strings(1).toLong, strings(2).toDouble)
+            }
+          )
+          .keyBy(_._1)
+          .timeWindow(Time.seconds(15), Time.seconds(5))
+          .reduce(
+            (x, y) => (x._1, x._2, x._3.min(y._3))
+          ).print()
+    ~~~
 
     
+
+    时间间隔可以通过 Time.milliseconds(x)，Time.seconds(x)，Time.minutes(x)等其
+    中的一个来指定。
+
+* CountWindow
+
+* 
