@@ -844,8 +844,63 @@ stream.addSink(new MySink(XXXX))
 
     ~~~scala
     
+    /**
+     * @author : Rison 2021/7/7 上午11:01
+     *         elasticSearch sink
+     */
+    object ElasticSearchSinkMain {
+      def main(args: Array[String]): Unit = {
+        val hosts = new util.ArrayList[HttpHost]()
+        hosts.add(new HttpHost("localhost", 9200))
+        val esSinkBuilder: ElasticsearchSink[ElasticSearchDemo] = new ElasticsearchSink.Builder[ElasticSearchDemo](hosts,
+          new ElasticsearchSinkFunction[ElasticSearchDemo] {
+            override def process(in: ElasticSearchDemo, runtimeContext: RuntimeContext, requestIndexer: RequestIndexer) = {
+              val indexRequest: IndexRequest = Requests
+                .indexRequest()
+                .index(in.index)
+                .`type`(in.`type`)
+                .source(in.toString)
+              requestIndexer.add(indexRequest)
+            }
+          }).build()
+    
+        val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+        env.fromCollection(
+          List(
+            ElasticSearchDemo("index_1", "_doc", "value_1"),
+            ElasticSearchDemo("index_2", "_doc", "value_1")
+          )
+        )
+          .addSink(esSinkBuilder)
+        env.execute("elasticSearch sink")
+      }
+    }
+    
+    case class ElasticSearchDemo(index: String, `type`: String, value: String)
+    
     ~~~
 
     
 
     
+
+* 自定义JDBC Sink
+
+  * pom.xml
+
+    ~~~shell
+            <dependency>
+                <groupId>mysql</groupId>
+                <artifactId>mysql-connector-java</artifactId>
+                <version>5.1.48</version>
+            </dependency>
+    ~~~
+
+  * 代码
+
+    ~~~scala
+    
+    ~~~
+
+    
+
