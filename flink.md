@@ -899,8 +899,155 @@ stream.addSink(new MySink(XXXX))
   * 代码
 
     ~~~scala
+    /**
+     * @author : Rison 2021/7/7 上午11:20
+     *         JDBC Sink
+     */
+    object JdbcSinkMain {
+      def main(args: Array[String]): Unit = {
+        val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+        env.fromCollection(
+          List(
+            MySqlDemo("lisi", 25),
+            MySqlDemo("wangwu", 23)
+          )
+        )
+          .addSink(MySqlSink())
+        env.execute("mysql sink instance")
+      }
+    }
+    case class MySqlDemo(name: String, age: Int)
+    case class MySqlSink() extends RichSinkFunction[MySqlDemo] {
+      var conn: Connection = _
+      var insert_stmt: PreparedStatement = _
+      var update_stmt: PreparedStatement = _
     
+      override def open(parameters: Configuration): Unit = {
+        conn = DriverManager.getConnection("jdbc:mysql//localhost:3306/test", "root", "123456")
+        insert_stmt = conn.prepareStatement(
+          """
+            |insert into user(name, age) values (?,?)
+            |""".stripMargin
+        )
+        update_stmt = conn.prepareStatement(
+          """
+            |update user
+            |set age = ?
+            |where name = ?
+            |""".stripMargin
+        )
+        
+      }
+      override def invoke(value: MySqlDemo, context: SinkFunction.Context[_]): Unit = {
+        update_stmt.setInt(1, value.age)
+        update_stmt.setString(2, value.name)
+        update_stmt.execute()
+        if (update_stmt.getUpdateCount == 0) {
+          insert_stmt.setInt(2, value.age)
+          insert_stmt.setString(1, value.name)
+          insert_stmt.execute()
+        }
+    
+      }
+      override def close(): Unit = {
+        update_stmt.close()
+        insert_stmt.close()
+        conn.close()
+      }
+    }
     ~~~
 
     
 
+### Flink 中的 Window
+
+#### 1) Window
+
+概述： Streaming 流式计算是一种被设计用于无限数据集的数据处理引擎，而无限的数据集是指一种不断增长的本质上无限的数据集，而window 是一种切割无限数据为有限块进行处理的手段。
+
+Window是无限数据流处理的核心,Window将一个无限的stream拆分为有限大小的”buckets“桶，我们可以在这些同上做计算操作。
+
+* window的类型
+
+  可以分成两类:
+
+  > CountWindow: 按照指定的数据条数生成一个window,与时间无关。
+  >
+  > TimeWindow: 按照时间生成window。
+
+  对于TimeWindow,可以根据窗口的实现原理的不同又可以分成三类，分别是 
+
+  * 滚动窗口 （Tumbling Window）
+
+    将数据依据固定的长度对数据进行切片
+
+    **特点： 时间对齐，窗口的长度固定，没有重叠**
+
+    滚动窗口分配器将每个元素分配到一个指定的窗口大小的窗口中，滚动窗口有一个固定的大小，并且不会出现重叠。
+
+    例如： 如果你指定了一个5分钟大小的滚动窗口，窗口的创建如下图示：
+
+    ![image-20210707173443593](pic/image-20210707173443593.png)
+
+    适合场景： 适合做BI统计等（做每个时间段的聚合计算）。
+
+  * 滑动窗口 （Sliding Window）
+
+    滑动窗口是固定窗口的更广义的一种形式，滑动窗口由固定的窗口长度和滑动的间隔组成。
+
+    **特点： 时间对齐，窗口的长度固定，可以有重叠**
+
+    滑动窗口分配器将元素分配到固定的长度的窗口中，与滚动窗口类似，窗口的大小由参数来配置，另一个窗口的滑动参数控制滑动窗口的开始频率。因此，滑动窗口如果滑动参数小于窗口大小的话，窗口是可以有重叠的，在这种情况下，元素会被分配到多个窗口中。
+
+    例如： 你有一个10分钟的窗口和5分钟的滑动，那么每个窗口的5分钟的窗口李包含这上个10分钟产生的数据。如下图示：
+
+    ![image-20210707174246528](pic/image-20210707174246528.png)
+
+    适用场景： 对最近的一个时间段内的统计（求某接口最近5分钟失败率决定是否要报警）
+
+  * 会话窗口 （Session Window）
+
+    由一系列时间组合一个指定时间长度的timeout间隙组成，类似于web应用的session,也就是一段时间没有接收到新数据就会产生新的窗口。
+
+    **特点： 时间无对齐**
+
+    session窗口分配器通过session 活动来对元素进行分组，session窗口跟滚动窗口和滑动窗口相比，不会有重叠和固定的开始时间和结束时间的情况，相反，当它在一个固定的周期内不再接收到元素，即非活动间隔产生，那个这个窗口就会关闭。一个session窗口通过一个session间隔来配置，这个session间隔定义了非活跃周期的长度，当这个非活跃周期产生，那么当前的session将关闭并且后续的元素将被分配到新的session窗口去。
+
+    ![image-20210707175701283](pic/image-20210707175701283.png)
+
+#### 2) Window API
+
+* TimeWindow
+
+  TimeWIndow是将指定时间范围内的所有数据组成一个window,一次对一个window里面的所有元素进行计算。
+
+  * 1 、滚动窗口
+
+    Flink 默认的时间窗口根据Processing Time进行窗口的划分，将Flink获取到的数据根据进入到Flink的时间划分到不同的窗口中。
+
+    ~~~ scala
+    dataStream
+          .map(
+            data => {
+              val strings: Array[String] = data.split(",")
+              (strings(0).toString, strings(1).toLong, strings(2).toDouble)
+            }
+          )
+          .keyBy(_._1)
+          .timeWindow(Time.seconds(15))
+          .reduce(
+            (x, y) => (x._1, x._2, x._3.min(y._3))
+          ).print()
+    ~~~
+
+    ​		时间间隔可以通过Time.milliseconds(x),Time.seconds(x),Time.minutes(x)等其中的一个来指定。
+
+  * 2、 滑动窗口
+
+    滑动窗口和滚动窗口的函数名是完全一致的，只是在传参数的时候需要传入两个参数，一个是window size, 一个是sliding_size。
+
+    下面代码中的sliding_size 设置为5s,也就是说，每5s就计算输出结果一次，每一次的计算的window范围是15s内的所有元素。
+
+    
+
+    

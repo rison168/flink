@@ -46,7 +46,6 @@ case class MySqlSink() extends RichSinkFunction[MySqlDemo] {
         |""".stripMargin
     )
 
-
   }
 
   override def invoke(value: MySqlDemo, context: SinkFunction.Context[_]): Unit = {
