@@ -693,3 +693,137 @@ stream.addSink(new MySink(XXXX))
 ![image-20210707093746824](pic/image-20210707093746824.png)
 
 * kafka
+
+  * pom.xml
+
+    ~~~ scala
+     <dependency>
+                <groupId>org.apache.flink</groupId>
+                <artifactId>flink-connector-kafka-0.11_2.12</artifactId>
+                <version>1.10.1</version>
+     </dependency>
+    ~~~
+
+    
+
+  * 代码
+
+    ~~~scala
+    /**
+     * @author : Rison 2021/7/7 上午9:49
+     *         kafka Sink
+     */
+    object KafkaSinkMain {
+      def main(args: Array[String]): Unit = {
+        val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+        env.fromCollection(
+          List(
+            KafkaDemo("kafka_1", "topic_1"),
+            KafkaDemo("kafka_2", "topic_2")
+          )
+        )
+          .map(
+            data => {
+              data.toString
+            }
+          )
+          .addSink(new FlinkKafkaProducer011[String]("localhost:9092", "test", new SimpleStringSchema[KafkaDemo]()))
+        env.execute("kafka sink main")
+    
+      }
+    }
+    
+    case class KafkaDemo(key: String, topic: String)
+    ~~~
+
+    
+
+* redis
+
+  * pom.xml
+
+    ~~~ scala
+            <dependency>
+                <groupId>org.apache.bahir</groupId>
+                <artifactId>flink-connector-redis_2.11</artifactId>
+                <version>1.0</version>
+            </dependency>
+    ~~~
+
+    
+
+  * 代码
+
+    ~~~scala
+    /**
+     * @author : Rison 2021/7/7 上午10:06
+     *         Redis Sink
+     */
+    object RedisSinkMain {
+      def main(args: Array[String]): Unit = {
+        val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+        val redisConf: FlinkJedisPoolConfig = new FlinkJedisPoolConfig.Builder()
+          .setHost("192.168.1.215")
+          .setPort(6379)
+          .setPassword("xxxx")
+          .setDatabase(12)
+          .build()
+        env.fromCollection(
+          List(
+            RedisDemo("key_1", "value_1"),
+            RedisDemo("key_2", "value_2")
+          )
+        ).addSink(new RedisSink[RedisDemo](redisConf, MyRedisMapper()))
+        env.addSource(MyRedisSource("redis:sink:instance")).print()
+        env.execute("redis sink")
+      }
+    }
+    
+    case class RedisDemo(key: String, value: String)
+    
+    case class MyRedisMapper() extends RedisMapper[RedisDemo] {
+      override def getCommandDescription: RedisCommandDescription = {
+        new RedisCommandDescription(RedisCommand.HSET, "redis:sink:instance")
+      }
+    
+      override def getKeyFromData(in: RedisDemo): String = {
+        in.key
+      }
+    
+      override def getValueFromData(in: RedisDemo): String = {
+        in.value
+      }
+    }
+    
+    case class MyRedisSource(key: String) extends RichSourceFunction[RedisDemo] {
+      var jedisPool: JedisPool = _
+      var jedis: Jedis = _
+    
+      override def open(parameters: Configuration): Unit = {
+        jedisPool = new JedisPool(new JedisPoolConfig(), "192.168.1.215", 6379, 10000, "xxxx", 12, "myRedisClient")
+    
+      }
+    
+      override def run(sourceContext: SourceFunction.SourceContext[RedisDemo]): Unit = {
+        import scala.collection.JavaConversions._
+        jedis = jedisPool.getResource
+        val hashMap: util.Map[String, String] = jedis.hgetAll(key)
+        hashMap.toList.foreach(
+          data => {
+            sourceContext.collect(RedisDemo(data._1, data._2))
+          }
+        )
+    
+    
+      }
+    
+      override def cancel(): Unit = {
+        jedis.close()
+        jedisPool.close()
+    
+      }
+    }
+    ~~~
+
+    
+

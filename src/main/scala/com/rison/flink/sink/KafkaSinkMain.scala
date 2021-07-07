@@ -22,7 +22,7 @@ object KafkaSinkMain {
           data.toString
         }
       )
-      .addSink(new FlinkKafkaProducer011[String]("localhost:9092", "test", new SimpleStringSchema[KafkaDemo]()))
+      .addSink(new FlinkKafkaProducer011[String]("localhost:9092", "test", new SimpleStringSchema()))
     env.execute("kafka sink main")
 
   }
