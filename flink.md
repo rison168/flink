@@ -1,6 +1,6 @@
 ### Flink简介
 
-#### 1） 初识Flink 
+#### 1)  初识Flink 
 
 Flink 起源于 Stratosphere 项目，Stratosphere 是在 2010~2014 年由 3 所地处柏林
 的大学和欧洲的一些其他的大学共同进行的研究项目，2014 年 4 月 Stratosphere 的
@@ -22,7 +22,7 @@ Apache Flink 是一个框架和分布式处理引擎，用于对无界和有界�
 
 ![image-20210706082933436](pic/image-20210706082933436.png)
 
-#### 2）Flink的重要特点
+#### 2) Flink的重要特点
 
 * 事件驱动型 Event-driver
 
@@ -196,7 +196,7 @@ NodeManager 加载 Flink 的 Jar 包和配置构建环境并启动 TaskManager�
 
 ### Flink 流处理API
 
-#### 1）Environment
+#### 1) Environment
 
 * getExexutionEnvironment
 * createLocalEnvironment
@@ -1102,8 +1102,302 @@ Window是无限数据流处理的核心,Window将一个无限的stream拆分为�
     下面代码中的sliding设置了2，也就是说，没收到两个相同的key的数据，就计算一次，没一次计算的window范围就是10个元素。
 
     ~~~scala
+    val dataStream: DataStream[String] = env.socketTextStream("localhost", 8888)
+            dataStream
+              .map(
+                data => {
+                  val strings: Array[String] = data.split(",")
+                  (strings(0).toString, strings(1).toLong, strings(2).toDouble)
+                }
+              )
+              .keyBy(_._1)
+              .countWindow(10, 2)
+              .reduce(
+                (x, y) => (x._1, x._2, x._3.min(y._3))
+              ).print()
     
     ~~~
 
+* window function
+
+  windwo function 定义了对窗口中收集的数据的计算操作，主要可以分为两类：
+
+  * 增量聚合函数
+
+    每条数据到来就进行计算，保持一个简单的状态。典型的增量聚合函数有
+
+    * ReduceFunction
+
+    * AggregateFunction
+
+      
+
+  * 全窗口函数
+
+    先把窗口所有的数据收集起来，等到计算的时候会遍历所有数据。
+
+    ProcessWindowFunction就是一个全窗口函数。
+
+* 其他可选API
+
+  * .trigger() 触发器 定义 window 什么时候关闭，触发计算并输出结果
+
+  * .evitor() 移除器 定义移除某些数据的逻辑
+
+  * .allowedLateness() 允许迟到的数据
+
+  * .sideOutPutLateData() 将迟到的数据放在侧输出流
+
+  * .getSideOutPut() 获取侧输出流
+
+
+
+
+### 时间语义与Watermark
+
+#### 1) Flink中的时间语义
+
+在Flink的流式处理中，会涉及到时间的不同概念，如下图所示：
+
+![image-20210708082415661](pic/image-20210708082415661.png)
+
+Event Time :是事件创建的时间，他通常由事件中的时间戳描述，例如采集的日志数据，每一条日志都会记录都会记录自己的生成时间，Flink通过时间戳分配器访问时间的时间戳。
+
+Ingestion Time : 是数据进入Flink的时间
+
+Processing Time: 是每一个执行基于时间操作的算子的本地系统时间，与机器相关，默认时间属性就是Processing Time.
+
+![image-20210708083110049](pic/image-20210708083110049.png)
+
+例如： 一条日志进入到Flink的时间是 2017-11-12 10:00:00.123，到达window的系统时间是2017-11-12 10:00:00.124,日志的内容如下：
+
+> 2017-11-02 18:37:15.624 INFO Fail over to rm2
+
+对于业务来说，要统计1min内的故障日志数，那个时间是最有意义的？
+
+eventTime ，因为我们根据日志生成的时间进行统计。
+
+#### 2) EventTime的引入
+
+在Flink的流式处理中，绝大部分的业务都会使用eventTime,一般只在eventTime无法使用的时候，才会考虑使用Processing Time 、IngestionTime.
+
+如果使用EventTime,那么需要引入EventTime的时间属性，引入的方式如下所示：
+
+~~~scala
+    val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+    //从调用时刻开始给env创建每一个stream追加时间特征
+    env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+    //TODO 业务
+    env.execute("event time")
+~~~
+
+#### 3) Watermark
+
+* 基本概念：
+
+  我们都知道，流处理从事件产生，到流经source,再到operator,中间是有一个过程和时间的。
+
+  虽然大部分情况下，流到operator的数据都是按照事件产生的顺序来的，但是也不排除由于网络、分布式等原因，导致乱序的产生，所谓乱序，就是指Flink接收到的事件的先后顺序不是严格按照事件的EventTime顺序排序的。
+
+![image-20210708084836701](pic/image-20210708084836701.png)
+
+那么此时，出现一个问题，一旦乱序出现，如果只能根据eventTime决定window的运行，我们不能明确数据是否全部到位，但又不能无限期的等下去，此时必须要有一个机制来保证一个特定的时间后，必须触发windwo去进行计算了，这个特别的机制，就是watermark.
+
+* watermark 是一种衡量event time进展的机制。
+
+* watermark 是用于处理乱序事件的，而正确的处理是乱序事件，通常用watermark机制结合window来实现。
+
+* 数据流中的watermark用于表示timestamp 小于 watermark的数据，都已经全部到达了，因此，window的执行也是由watermark来触发的。
+
+* watermark可以理解成一个延迟触发机制，我们可以设置watermark的延时时长t,每次系统都会校验已经到达的数据中的最大maxEventTime，然后认定eventTime小于maxEventTime-t的所有数据已经到达，如果窗口的停止时间等于maxEventTime -1,那么这个窗口就会被触发执行。
+
+  有序的watermark如下图，（watermark设置为0）
+
+  ![image-20210708085918120](pic/image-20210708085918120.png)
+
+乱序流的watermark如下图所示：（watermark设置为2）
+
+![image-20210708090032619](pic/image-20210708090032619.png)
+
+当Flink 接收到数据时，会按照一定的规则去生成watermark,这条watermark就等于当前所有到达数据中的maxEventTime-延长时长，也就是说，watermark是基于数据携带的时间戳生成的，一旦watermark比当前未触发的窗口的停止时间要晚，那么就会触发相应的窗口执行。由于event time 是数据携带的，因此，如果运行过程中，无法获取到新的数据，那么被触发的窗口将永远不会触发。
+
+上图中，我们设置的允许的最大延迟到达时间为2s,所以时间戳7s的事件对应的watermark是5s,时间戳12s的事件的watermark是10s,如果我们的窗口1是1s~5s,窗口2是6s~10S,那么时间戳为7s的事件到达的watermark恰好触发的窗口1，时间戳12s的事件到达时的watermark恰好触发窗口2.
+
+watermark就是触发前窗口的“关窗时间”，一旦触发关门那么以当前时刻为准的窗口范围内的所有数据都会收入到窗中，只要没有达到水位，不管现实中的时间推进了多久都不会触发关窗。
+
+* watermark的引入
+
+  watermark的引入很简单，对于乱序的数据，最常见的引用方式如下：
+
+  ~~~scala
+   val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+      val dataStream: DataStream[String] = env.socketTextStream("localhost", 8888)
+      dataStream.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor[String](Time.milliseconds(1000)) {
+        override def extractTimestamp(t: String) = t.toLong * 1000
+      })
+  ~~~
+
+  Event Time 的使用一定要指定数据源的时间戳，否则程序无法知道事件的事件时间是什么（数据源里面都没有时间戳的话，就只能使用proccessing time 了）。
+
+  我们看到上面的例子中创建了一个看起来有点复杂的类，这个类实现的其实就是分配时间戳的接口。Flink暴露了TimestampAssignerj接口给我们实现，使我们可以自定义如何从事件数据中抽取时间戳。
+
+  ~~~scala
+      val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+      //从调用时刻开始给env创建每一个stream的追加时间特性
+      env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+      val dataStream: DataStream[String] = env.socketTextStream("localhost", 7777)
+      dataStream.assignTimestampsAndWatermarks(MyAssigner())
+      env.execute("water mark instance")
+  ~~~
+
+  MyAssinger 有两种类型
+
+  *  AssignerWithPeriodicWatermarks
+
+    周期性的生成watermark，系统会周期性的将watermark插入到流中（水位线也是一种特殊的事件），默认周期是200毫秒，可以使用ExecutionConfig.setAutoWaterInterval()方法进行设置。
+
+    ~~~scala
+     //每隔5秒产生一个watermark
+        env.getConfig.setAutoWatermarkInterval(5000)
+    ~~~
+
+    产生watermark的逻辑：每隔5秒，Flink就会调用AssignerWithPeriodicWatermarks的getCurrentWatermark()方法，如果方法返回一个时间戳大于之前的时间戳，新的watermark会插入到流中，这个检查保证了水位线是单调递增的。如果方法返回的时间戳小于等于之前水位的时间戳，则不会产生新的watermark。
+
+    ~~~scala
+     /**
+       * Assigns timestamps to the elements in the data stream and periodically creates
+       * watermarks to signal event time progress.
+       *
+       * This method creates watermarks periodically (for example every second), based
+       * on the watermarks indicated by the given watermark generator. Even when no new elements
+       * in the stream arrive, the given watermark generator will be periodically checked for
+       * new watermarks. The interval in which watermarks are generated is defined in
+       * [[org.apache.flink.api.common.ExecutionConfig#setAutoWatermarkInterval(long)]].
+       *
+       * Use this method for the common cases, where some characteristic over all elements
+       * should generate the watermarks, or where watermarks are simply trailing behind the
+       * wall clock time by a certain amount.
+       *
+       * For the second case and when the watermarks are required to lag behind the maximum
+       * timestamp seen so far in the elements of the stream by a fixed amount of time, and this
+       * amount is known in advance, use the
+       * [[BoundedOutOfOrdernessTimestampExtractor]].
+       *
+       * For cases where watermarks should be created in an irregular fashion, for example
+       * based on certain markers that some element carry, use the
+       * [[AssignerWithPunctuatedWatermarks]].
+       *
+       * @see AssignerWithPeriodicWatermarks
+       * @see AssignerWithPunctuatedWatermarks
+       * @see #assignTimestampsAndWatermarks(AssignerWithPunctuatedWatermarks) 
+       */
+      @PublicEvolving
+      def assignTimestampsAndWatermarks(assigner: AssignerWithPeriodicWatermarks[T]): DataStream[T] = {
+        asScalaStream(stream.assignTimestampsAndWatermarks(assigner))
+      }
     
+    ~~~
+
+    例子：
+
+    自定义一个周期性的时间戳抽取：
+
+    ~~~scala
+    case class MyAssigner() extends AssignerWithPeriodicWatermarks[String]{
+      val bound: Long = 60 * 1000 //延时为1分钟
+      var maxTimestamp: Long = Long.MinValue //观察到最大的时间戳
+      
+      override def getCurrentWatermark: Watermark = {
+        new Watermark(maxTimestamp - bound)
+      }
+    
+      override def extractTimestamp(t: String, l: Long): Long = {
+        maxTimestamp = maxTimestamp.max(t.toLong)
+        t.toLong
+      }
+    }
+    ~~~
+
+    一种简单的特殊情况是，如果我们事先知道数据流的时间戳是单调递增的，也是说没有乱序，那么我们可以使用 assignAscendingTimestamps，这个方法会直接使用数据的时间戳来生成watermark.
+
+    ~~~scala
+       val withTimesAndWatermarks: DataStream[String] = dataStream.assignAscendingTimestamps(_.toLong)
+    ~~~
+
+    对于乱序的数据流，如果我们能大致估算出数据流中的事件最大延迟时间，就可以使用如下代码：
+
+    ~~~scala
+     dataStream.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor[String](Time.milliseconds(1000)) {
+          override def extractTimestamp(t: String) = t.toLong * 1000
+        })
+    ~~~
+
+    
+
+  *  AssignerWithPunctuatedWatermarks
+
+    间断方式生成watermark,和周期性生成的方式不同，这种方式是不固定时间的，而是可以根据需要对每条数据进行筛选和处理。直接上代码举个例子：根据某个id的数据流插入watermark
+
+    ~~~scala
+    case class PunctuatedAssigner() extends AssignerWithPunctuatedWatermarks[SensorReading] {
+      val bound: Long = 60 * 1000
+      override def checkAndGetNextWatermark(t: SensorReading, extractedTS: Long): Watermark = {
+        if (t.id == "sensor_1"){
+          new Watermark(extractedTS - bound)
+        }else{
+          null
+        }
+      }
+      override def extractTimestamp(t: SensorReading, extractedTS: Long): Long = {
+        t.timestamp
+      }
+    }
+    ~~~
+
+    源码：
+
+    ~~~ scala
+    /**
+       * Assigns timestamps to the elements in the data stream and periodically creates
+       * watermarks to signal event time progress.
+       *
+       * This method creates watermarks based purely on stream elements. For each element
+       * that is handled via [[AssignerWithPunctuatedWatermarks#extractTimestamp(Object, long)]],
+       * the [[AssignerWithPunctuatedWatermarks#checkAndGetNextWatermark()]] method is called,
+       * and a new watermark is emitted, if the returned watermark value is larger than the previous
+       * watermark.
+       *
+       * This method is useful when the data stream embeds watermark elements, or certain elements
+       * carry a marker that can be used to determine the current event time watermark. 
+       * This operation gives the programmer full control over the watermark generation. Users
+       * should be aware that too aggressive watermark generation (i.e., generating hundreds of
+       * watermarks every second) can cost some performance.
+       *
+       * For cases where watermarks should be created in a regular fashion, for example
+       * every x milliseconds, use the [[AssignerWithPeriodicWatermarks]].
+       * 
+       * @see AssignerWithPunctuatedWatermarks
+       * @see AssignerWithPeriodicWatermarks
+       * @see #assignTimestampsAndWatermarks(AssignerWithPeriodicWatermarks) 
+       */
+      @PublicEvolving
+      def assignTimestampsAndWatermarks(assigner: AssignerWithPunctuatedWatermarks[T])
+          : DataStream[T] = {
+        asScalaStream(stream.assignTimestampsAndWatermarks(assigner))
+      }
+    ~~~
+
+    以上两个接口都继承自 TimestampAssigner
+
+  #### 
+
+#### 4) EvnetTime 在window的使用
+
+* 滚动窗口 TumblingEventTimeWindows
+
+  
+
+* 滑动窗口 SlidingEventTimeWindows
+
+* 会话窗口 EvnetTime SessionWindows
 
