@@ -28,11 +28,12 @@ object TumblingEventTimeWindow {
           (arr(0).toString, arr(1).toDouble, arr(2).toLong)
         }
       )
-    val textWithEventTimeDataStream: DataStream[(String, Double, Long)] = textDS.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor[(String, Double, Long)](Time.milliseconds(1000)) {
-      override def extractTimestamp(in: (String, Double, Long)) = {
-        in._3
-      }
-    })
+    val textWithEventTimeDataStream: DataStream[(String, Double, Long)] = textDS.assignTimestampsAndWatermarks(
+      new BoundedOutOfOrdernessTimestampExtractor[(String, Double, Long)](Time.milliseconds(1000)) {
+        override def extractTimestamp(in: (String, Double, Long)) = {
+          in._3
+        }
+      })
 
     textWithEventTimeDataStream.keyBy(0).print("key:")
 
