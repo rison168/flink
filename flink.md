@@ -1516,4 +1516,65 @@ watermark就是触发前窗口的“关窗时间”，一旦触发关门那么�
   }
   ~~~
 
+
+
+### ProcessFuntion API （底层API）
+
+我们之前学习的转换算子是无法访问事件的时间戳信息和水位信息的。而这在一些应用场景下，极为重要。
+
+例如MapFunction这样的map转换算子无法访问到时间戳或者当前的事件时间。
+
+基于此，DataStreamAPI提供了一系列的Low_Level转换算子，可以访问时间戳、watermark以及注册定时事件。还可以输出一些特定的一些事件。例如超时事件等。
+
+ProcessFunction 用来构建事件驱动的应用以及实现自定义业务逻辑（在使用之前的window函数和转换算子无法实现）。
+
+例如，FlinkSQL 就是使用Process Function实现的。
+
+Flink 提供了8个Process Function:
+
+* ProcessFunction
+* KeyedProcessFunction
+* CoProcessFunction
+* ProcessJoinFunction
+* BroadcastProcessFunction
+* keyedBroadcastProcessFunction
+
+#### 1) keyedProcessFunction
+
+keyedProcessFunction 用来操作keyedStream.keyedProcessFunction会处理流的每一个元素，输出为0个、1个
+
+或者多个元素，所有的processFunction都继承自RichFunction接口，所以都有open()、close()和getRuntimeXContext()等方法。
+
+而KeyedProcessFunction[KEY, IN, OUT] 还额外提供两个方法。
+
+* processElement(v: IN, ctx: Context, out: Collector[OUT]),流中的每一个元素都会调用这个方法。调用结果会放在collector数据类型中输出。Context可以访问元素的时间戳，元素的key,以及TimerService时间服务。Context还可以将结果输出到别的流（side outputs）。
+* onTime(timestamp: Long, ctx: onTimerContext, out: Collertor[OUT]是一个回调函数。当前注册定时器触发时就会调用。参数timestamp为定时器所设定的时间戳。Collector为输出结果的集合。onTimeContext和processElement的Context参数一样，提供上下文的一些信息。例如定时器触发的时间信息（事件时间或者处理时间）
+
+#### 2) TimerService 和定时器（Timers）
+
+context和OnTimeContext所持有的TimeService对象拥有以下的方法：
+
+* currentProcessingTime() => Long， 返回当前的处理时间
+
+* currentWatermark() => long, 返回当前的watermark时间戳
+
+* registerProcessingTimeTImer(timestamp: long) => Unit， 会注册当前key的processing time的定时器，当processing time 达到定时时间时，触发timer.
+
+* rgeisterEvnetTimeTimer(timestamp: Long) => Unit, 会注册当前的keyd的event time 的定时器，当水位线大于等于定时器注册的时间时，触发定时器执行.
+
+* deleteProcessingTimeTimer(timestamp: Long) => Unit ,删除之前注册的处理时间定时器，如果没有这个时间戳，就不会执行。
+
+* deleteEventTimeTmer(timestamp: long) => unti, 删除之前注册的事件时间定时器，如果没有该时间戳的定时器，则不执行。
+
+  当定时器timer触发时，会执行回调函数onTimer()，注意定时器timer只能在keyedStreams上面使用。
+
   
+
+####  3) 侧输出流 （SideOutPut）
+
+#### 4) CoProcessFunction
+
+
+
+
+

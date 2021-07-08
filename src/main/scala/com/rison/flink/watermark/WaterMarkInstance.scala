@@ -24,7 +24,7 @@ object WaterMarkInstance {
     val withTimesAndWatermarks: DataStream[String] = dataStream.assignAscendingTimestamps(_.toLong)
     //乱序情况下
     dataStream.assignTimestampsAndWatermarks(MyAssigner())
-    dataStream.assignTimestampsAndWatermarks(PunctuatedAssigner())
+//    dataStream.assignTimestampsAndWatermarks(PunctuatedAssigner())
     env.execute("water mark instance")
 }
 
