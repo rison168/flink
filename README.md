@@ -1714,9 +1714,73 @@ CoProcessFunction也提供onTime()回调函数。
 
 尽管无状态的计算很重要，但是流处理对有状态计算更感兴趣。事实上，正确的实现有状态的计算比实现无状态要难的多。旧的流处理系统并不支持有状态的计算，而新一代的流处理系统则将状态及其正确性视为重中之重。
 
-#### 1） 有状态的算子和Application
+#### 1) 有状态的算子和Application
 
 Flink 内置了很多算子，数据源source,数据存储sink都是有状态的，流中的数据都是buffer records，会保存一定的元素或者元数据。例如：Process window Function 会缓存输入流的数据。processFunction 会保存设置定时器信息等等。
 
 在Flink中，状态始终与特定的算子相关联。总的来说，有两种状态：
+
+* 算子状态（operator state）
+* 键控状态（keyed state）
+
+#### 2) 算子状态
+
+算子的状态作用范围限定为算子任务，这意味着由同一并行的任务处理的所有数据都可以访问到相同的状态，状态对于同一个任务而言是共享的。算子状态不能由相同或者不同的算子的另一个任务访问。
+
+![image-20210708175421047](pic/image-20210708175421047.png) 
+
+Flink为算子状态提供三种基本数据结构：
+
+* 列表状态（List state）
+
+  将状态表示为一组数据的列表。
+
+* 联合列表状态 （Union list state）
+
+* 也将状态表示为数据的列表。她与常规列表状态的区别在于，在发生故障时，或者从保存点（savepoint）启动应用程序时如何恢复。
+
+* 广播状态（broadcast state）
+
+  如果一个算子有多项任务，而他的每项任务状态又都相同，那么这种特殊的情况最适合应用广播状态。
+
+  
+
+#### 3) 键控状态
+
+键控状态（keyed state)是根据输入数据中定义的键（key）来维护和访问的。Flink为每个键值维护一个状态的实例，并将具有相同键的所有数据，都分区到一个算子任务中。这个任务会维护和处理这个key对应的状态。当任务处理一条数据时，他会自动将状态的访问范围限定为当前数据的key.因此，具有相同key的所有数据都会访问相同的状态。keyed state很类似一个分布式的key-value map 数据结构，只能用于keyedstream （keyBy算子处理之后）。
+
+![image-20210708181700766](pic/image-20210708181700766.png)
+
+Flink的keyed state 支持以下的数据类型：
+
+* ValueState[T]保存单个值，值的类型为T.
+  * get 操作： ValueState.value()
+  * set 操作： ValueState.update(value:T）
+
+* ListState[T] 保存一个列表，列表里的元素的数据类型为T,基本操作如下：
+  * ListState.add(value: T)
+  * ListState.addAll(values: java.util.List[T])
+  * ListState.get() 返回Interable[T]
+  * ListState.update(values: java.util.List[T])
+* MapState[k,v] 保存key-value对
+  * MapState.get(key: K)
+  * MapState.put(key: K, value:V)
+  * MapState.contains(key: K)
+  * MapSate.remove(key:K)
+* ReducingState[T]
+* AggregatingState[I,O]
+
+State.clear()是清空操作。
+
+
+
+
+
+
+
+
+
+
+
+
 
