@@ -1480,3 +1480,40 @@ watermark就是触发前窗口的“关窗时间”，一旦触发关门那么�
 
 * 会话窗口 EvnetTime SessionWindows
 
+  相邻两次数据的EventTime的时间差超过指定的时间间隔就会被触发执行，如果加入Watermark，会在符合窗口触发的情况下进行延迟，到达延迟水位再进行窗口触发。
+
+  ~~~scala
+  
+  /**
+   * @author : Rison 2021/7/8 下午2:41
+   *         会话窗口
+   */
+  object EventTimeSessionWindow {
+    def main(args: Array[String]): Unit = {
+      val env: StreamExecutionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment
+      env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime)
+      env.setParallelism(1)
+      val dataStream: DataStream[String] = env.socketTextStream("localhost", 7777)
+      val dataMap: DataStream[(String, Double, Long)] = dataStream.map(
+        data => {
+          val arr: Array[String] = data.split(",")
+          (arr(0).toString, arr(1).toDouble, arr(2).toLong)
+        }
+      )
+      dataMap.assignTimestampsAndWatermarks(
+        new BoundedOutOfOrdernessTimestampExtractor[(String, Double, Long)](Time.milliseconds(1000)) {
+          override def extractTimestamp(t: (String, Double, Long)) = t._3.toLong
+        }
+      ).keyBy(_._1)
+        .window(EventTimeSessionWindows.withGap(Time.milliseconds(500)))
+        .reduce(
+          (x, y) => {
+            (x._1, x._2 + y._3, 0L)
+          }
+        ).map(_._2).print("windows:::::").setParallelism(1)
+      env.execute(this.getClass.getSimpleName.stripSuffix("$"))
+    }
+  }
+  ~~~
+
+  
