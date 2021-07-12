@@ -1812,7 +1812,30 @@ State.clear()是清空操作。
 
 #### 5) 检查点
 
+Flink具体如何保证exactly-once呢，她使用一种被称为“检查点”（checkpoint）的特性，在出现故障时将系统重置回正确状态。
+
+* Flink 检查点算法
+
+  Flink检查点的核心作用时确保状态的正确，即使遇到程序中断，也要正确。Flink为用户提供用来定义状态的工具。
 
 
 
+### 八、 Table API 与SQL
+
+Table API 是流处理和批处理通用的关系型API, Table API 可以基于流输入或者批输入来运行而不需要任何修改。Table API 是SQL 语言的超集并专门为Apache FIink 设计的。Table API 是scala 和 java语言集成的API,与常规sql语言中将查询指定为字符串不同，Table API 查询是以Java 或者scala 中的语言嵌入样式来定义的，具有IDE支持如： 自动完成和语法检测。
+
+需要引入的pom依赖：
+
+~~~scala
+<dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-table-planner_2.12</artifactId>
+    <version>1.10.1</version>
+    </dependency>
+    <dependency>
+    <groupId>org.apache.flink</groupId>
+    <artifactId>flink-table-api-scala-bridge_2.12</artifactId>
+    <version>1.10.1</version>
+</dependency>
+~~~
 
